@@ -1,0 +1,189 @@
+---
+title: "Stat 261 Research Paper"
+author: "Harrison Jia"
+date: "12/5/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(astsa)
+library(tseries)
+library(forecast)
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Over the course of time since the beginning of the industrial revolution, temperatures of the earth has largely been seen to increase at a steady pace (1). Scientists tend to attribute this to effects of this revolution and the emissions of various types of gas in large quantities. These large amounts of emissions are generally sought as a primary reason for the meteoric rise in global temperature. However, even such a well established theory has its own critics and many have been much more vocal since the relsease of new data from the NOAA and scientists there concluding that there global warming had no slowed down (2) - at which critics who have seen the data and compared them to predicted models claim there is a clear "slow down" relative to what was being predicted. While global warming as a concept in tandem the larger ideas of climate change is a tough one to tackle without accounting for a multitude of types of data, we will look to use data that that we do have in our disposal to further understand at the very least a localized sample of this trend or lack there of. To be more precise, we will use governmental data from the United Kingdom that tracks seasonal average temperature in Central England from 1659 to 2020. Perhaps, we may be able to see a trend that may help us answer the question at hand.
+
+## Analysis and Graphs
+
+To begin our search, we will start by examining each of the four given time series given to us (each resembling a season). We will look for any patterns we may see in general with out eyes first as well as issues we may need to adjust for, such as heteroskedastic variance. Before we get started, a quick look at the table itself, we can notice that there is an obscenely large magnitude for the first winter and as such will choose to begin from the year 1660 for all seasons in order to keep the sample sizes consistent. 
+
+```{r echo=FALSE}
+temp_data <- read.delim("ssn_HadCET_mean.txt", header=TRUE, sep="")
+
+win = temp_data$DJF[c(2: 362)]
+spr = temp_data$MAM[c(2: 362)]
+summ = temp_data$JJA[c(2: 362)]
+fal = temp_data$SON[c(2: 362)]
+
+plot.ts(win)
+abline(mean(win),0,col="blue")
+lines(lowess(win, f=0.05), lwd=2, col=2)
+```
+
+Here we have the mean of the time series for the winter months in blue. In addition, smoothed trend using lowess has been added to the graph with approximately decade pattern. Interresting to note that the smooothed line stays above the average for over the past 50 years and before that had been hovering around the mean.  
+
+```{r echo=FALSE}
+plot.ts(spr)
+abline(mean(spr),0,col="blue")
+lines(lowess(spr, f=0.05), lwd=2, col=2)
+```
+
+This is the same thing but with the spring months. There is a much clear "jump" or rise towards the end tail of the data in the past 20-30 years. 
+
+```{r echo=FALSE}
+plot.ts(summ)
+abline(mean(summ),0,col="blue")
+lines(lowess(summ, f=0.05), lwd=2, col=2)
+```
+
+Summer Months, again we still see a jump and stagnant of the values near the end of the series; perhaps there is a raising of temperature pattern here?
+
+```{r echo=FALSE}
+plot.ts(fal)
+abline(mean(fal),0,col="blue")
+lines(lowess(fal, f=0.05), lwd=2, col=2)
+```
+
+Fall Months - same conclusions can be made but it is interesting to note that the values seem to be aove the curve for over 70 years here.
+
+So far at a general glance of the time series we can see a general upwards trend within the last 20-25 years for all four months. In order to attempt to answer the question at hand, we will try to fit models on each of the four series with the last 20 years removed and then plot the perdiciton on top of the time series to see if there is any discrepancy from the perdiction model and its confidence interval. Meanwhile the rest of the time the data showed more of an oscillation around the mean. There seems to be alot of shifting up and down and so it may be hard to see anything clear in a periodogram with this data and may focus more on looking towards fitting time domain trends rather than frequency domain ones. We can see this in the following graph.
+
+```{r echo=FALSE}
+win.per = mvspec(win, taper = 0)
+win_specs = sort(win.per$spec, decreasing = TRUE)[c(1,2)]
+p1 = win.per$freq[win.per$spec==win_specs[1]]; p1
+p2 = win.per$freq[win.per$spec==win_specs[2]]; p2
+```
+
+While there are a few that stand out, it is hard to say which ones we omit as well. This would tell us there are a lot of frequencies that we may need to account for. 1 big trend seems to be near 0.066..., or $\frac{1}{15}$ or 24 years or so and another large trend seems to be near 0.288 or about 12 years or so. Many articles talk about a decadal cycle of the ocean temerpature and currents as a big factor for changes in temperature. There may be some sort of thing similar going on here. This could also be from the activities of the sun. We won't dive any deeper on analysis of the frequencies for though the values of the biggest peak do seem like what was expected there are too much noise involved for us to fully get anywhere. Log transformations do not help this either.
+
+Next we will examine the ACF and PACF of each to understand the models better.
+
+```{r echo=FALSE}
+par(mfrow=c(1,2))
+win1 = temp_data$DJF[c(2: 342)]
+acf(win1, lag.max = 50)
+pacf(win1, lag.max = 50)
+```
+
+When looking at the ACF and the PACF, we cannot really see much of a semblence of either an AR or MA process. ACF drops after 0 while so does PACF in a sense. This is beginning to look like a white noise model of $x_t = w_t$
+
+```{r echo=FALSE}
+summary(arima(win1, order = c(1,0,1)))
+invisible(sarima(win1, 1, 0, 1, Model = FALSE))
+```
+
+Looking at the AMRA(1,1) model it seems to confirm my suspision and worries. Perhaps the model is with the coefficients as estimated, but it is important to note that both values are close to each other in that perhaps the model was a redundant one: $(1-\phi B)x_t=(1-\phi B)w_t$ and we may cancel them out to get back to what was said before. It is hard to think of another method to do here as something like differencing may overdo the model and reintroduce an MA(1) model that would create dependence that does not exactly exist in the model currently. The plot of the residuals seem okay however, they fit normality quite well.
+
+Instead we could look to examine an ARMA(0,0) model or the white noise model onto the winter time series.
+
+```{r echo=FALSE}
+summary(arima(win1, order = c(0,0,0)))
+invisible(sarima(win1, 0, 0, 0, Model = FALSE))
+```
+
+This model seems to fit well. We have low ME as well. The ACF of residuals look good but there may be some normality voilation as the Q-Q plot seems to be leaning towards the right - but this is still very close to normal still. Although the forecast of this type of model is simple to derive, we still still plot it and compare to what the actual values give us.
+
+```{r echo=FALSE}
+plot(forecast(arima(win1, order = c(0,0,0)), 20))
+lines(win)
+```
+
+It seems as though again the predicted values are underestimating the true values a bit, but not much of it is too far outside of the confidence interval for statistical consern. 
+
+```{r echo=FALSE}
+par(mfrow=c(1,2))
+spr1 = temp_data$MAM[c(2: 342)]
+acf(spr1, lag.max = 50)
+pacf(spr1, lag.max = 50)
+```
+
+Here for spring, we can see that both ACF and PACF tend to trail off and thus it would seem that and ARMA model would be a good choice to examine for this time series. 
+
+```{r echo=FALSE}
+summary(arima(spr1, order = c(1,0,1)))
+invisible(sarima(spr1, 1, 0, 1, Model = FALSE))
+```
+
+The coefficients here is much better compared to the winter series. The Q-Q plot of residuals seem to how normality of the residuals and the ACF shows no apparent devation from the model assumptions and thus seems to be a good fit for this series.
+
+```{r echo=FALSE}
+plot(forecast(arima(spr1, order = c(1,0,1)), 20))
+lines(spr)
+```
+
+The predicted model and the actual values seem to deviate more and more as time goes on. There seems to be a underestimation of the true values in general indicating perhaps there may be some warming but until towards the final few years, majority of the values are within the confidence interval.
+
+```{r echo=FALSE}
+par(mfrow=c(1,2))
+summ1 = temp_data$JJA[c(2: 342)]
+acf(summ1, lag.max = 50)
+pacf(summ1, lag.max = 50)
+```
+
+For the summer time series, we may have a similar issue as we saw with winter but there seems to be not as severe. We should look out for redundency if there is any and take action immediately.
+
+```{r echo=FALSE}
+summ_fit = arima(summ1, order = c(1,0,1))
+summary(arima(summ1, order = c(1,0,1)))
+invisible(sarima(summ1, 1, 0, 1, Model = FALSE))
+```
+
+Values from the ARMA(1,1) again seem to fit well, more importantly the coefficients of AR and MA do seem different/further apart so redundency seems to be not an issue here.
+
+```{r echo=FALSE}
+plot(forecast(summ_fit, 20))
+lines(summ)
+```
+
+Overall, the summer time series as a similar ACF and PACF as spring and thus we can fit an ARMA(1,1) as well. The fitted values seem to be good in that the values dont seem to indicate any redundency as it did in the winter series. Fitting the model prediciting 20 years forward, we can see that unlike the spring series, that the actual values fit very better with the predicted ones.
+
+```{r echo=FALSE}
+par(mfrow=c(1,2))
+fal1 = temp_data$SON[c(2: 342)]
+acf(fal1, lag.max = 50)
+pacf(fal1, lag.max = 50)
+```
+
+```{r echo=FALSE}
+summary(arima(fal1, order = c(1,0,1)))
+
+invisible(sarima(spr1, 1, 0, 1, Model = FALSE))
+plot(forecast(arima(fal1, order = c(1,0,1)), 20))
+lines(fal)
+```
+
+Values again look good within the fitted ARMA(1,1) model, simiarly with normality within the residuals and the ACF of residuals look good as well. Model seemed to be good here. The forecasted model is slightly underestimating the actual values but majority of the values are within the confidence interval.
+
+## Conclusion
+
+Overall, we can see that for most of the time series AMRA(1,1) model fit the series well. In addition, we can see from our forecast into the 20 years that the actual values tend to be within the confidence interval of the predicted. That being said the values tend towards a slight underestimation of the values (maybe this is a warming trend?). So far there is no sign of a slowing down here. In addition, the values all seem to show a trend upwards which seem to disagree with the idea of slowing down completely for all seasons. It seems that a great fit for all the models was an AMRA model as the ACF and PACF seemed to decay natually for most of the time series. Winter time series showed perhaps it doesn;t statistically differ from a white noise series. ARMA(1,1) for the other three fit the model well. Further analysis on other data such as ocean temperature or solar activity may be needed to fully understand if the raising effect we see here in the models are from those events or perhaps has global warming caught up to us - in terms of human activity.
+
+
+
+
+
+\newpage
+
+## References
+
+1) https://www.climate.gov/news-features/climate-qa/why-did-earth%E2%80%99s-surface-temperature-stop-rising-past-decade
+
+2) https://www.scientificamerican.com/article/did-global-warming-slow-down-in-the-2000s-or-not/
+
+3) http://www.geo.umass.edu/faculty/bradley/jones1992a.pdf
+
